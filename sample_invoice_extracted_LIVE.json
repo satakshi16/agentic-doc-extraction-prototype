@@ -1,0 +1,249 @@
+{
+  "schema_version": "1.0.0",
+  "extraction_metadata": {
+    "source_file": "/Users/satakshi/Documents/AI Projects/LangGraph Projects/Agentic Doc Extraction/testing.pdf",
+    "document_type": "invoice",
+    "pages_processed": 1,
+    "page_details": [
+      {
+        "page": 1,
+        "width_pt": 612.0,
+        "height_pt": 792.0,
+        "rotation": 0,
+        "char_count": 748,
+        "table_count": 2
+      }
+    ],
+    "pipeline_stages": [
+      "preprocessing",
+      "layout_analysis",
+      "element_classification",
+      "content_extraction",
+      "relationship_extraction",
+      "semantic_reconstruction"
+    ],
+    "errors": []
+  },
+  "layout": {
+    "structural_blocks_count": 8,
+    "structural_blocks": [
+      {
+        "block_id": 1,
+        "type": "header",
+        "position": "top",
+        "summary": "The document header containing the title 'INVOICE' and company name 'CONTOSO LTD.'."
+      },
+      {
+        "block_id": 2,
+        "type": "metadata_block",
+        "position": "upper",
+        "summary": "Invoice metadata including invoice number, date, due date, customer name, and customer ID."
+      },
+      {
+        "block_id": 3,
+        "type": "address_block",
+        "position": "upper",
+        "summary": "Address details for billing, shipping, and service locations for Microsoft Corporation."
+      },
+      {
+        "block_id": 4,
+        "type": "table",
+        "position": "middle",
+        "summary": "Table 1.1 containing sales transaction details such as salesperson, P.O. number, and terms."
+      },
+      {
+        "block_id": 5,
+        "type": "line_item_row",
+        "position": "middle",
+        "summary": "Line item row detailing the quantity, description, unit price, and total for a test service."
+      },
+      {
+        "block_id": 6,
+        "type": "totals_block",
+        "position": "middle",
+        "summary": "Subtotal, sales tax, total, previous balance, and total due amounts for the invoice."
+      },
+      {
+        "block_id": 7,
+        "type": "notes_block",
+        "position": "lower",
+        "summary": "A note thanking the customer for their business."
+      },
+      {
+        "block_id": 8,
+        "type": "address_block",
+        "position": "lower",
+        "summary": "Remittance address for Contoso Billing."
+      }
+    ]
+  },
+  "semantics": {
+    "classified_elements_count": 8,
+    "classified_elements": [
+      {
+        "element_id": 1,
+        "block_id": 1,
+        "semantic_role": "document_title",
+        "confidence": "high",
+        "content_snippet": "The document header containing the title 'INVOICE' and company name 'CONTOSO LTD.'."
+      },
+      {
+        "element_id": 2,
+        "block_id": 2,
+        "semantic_role": "invoice_metadata",
+        "confidence": "high",
+        "content_snippet": "Invoice metadata including invoice number, date, due date, customer name, and customer ID."
+      },
+      {
+        "element_id": 3,
+        "block_id": 3,
+        "semantic_role": "buyer_info",
+        "confidence": "high",
+        "content_snippet": "Address details for billing, shipping, and service locations for Microsoft Corporation."
+      },
+      {
+        "element_id": 4,
+        "block_id": 4,
+        "semantic_role": "invoice_metadata",
+        "confidence": "medium",
+        "content_snippet": "Table 1.1 containing sales transaction details such as salesperson, P.O. number, and terms."
+      },
+      {
+        "element_id": 5,
+        "block_id": 5,
+        "semantic_role": "line_item",
+        "confidence": "high",
+        "content_snippet": "Line item row detailing the quantity, description, unit price, and total for a test service."
+      },
+      {
+        "element_id": 6,
+        "block_id": 6,
+        "semantic_role": "financial_summary",
+        "confidence": "high",
+        "content_snippet": "Subtotal, sales tax, total, previous balance, and total due amounts for the invoice."
+      },
+      {
+        "element_id": 7,
+        "block_id": 7,
+        "semantic_role": "other",
+        "confidence": "medium",
+        "content_snippet": "A note thanking the customer for their business."
+      },
+      {
+        "element_id": 8,
+        "block_id": 8,
+        "semantic_role": "payment_instructions",
+        "confidence": "high",
+        "content_snippet": "Remittance address for Contoso Billing."
+      }
+    ]
+  },
+  "extracted_data": {
+    "vendor": {
+      "name": "CONTOSO LTD.",
+      "address": "Contoso Headquarters, 123 456th St, New York, NY, 10001",
+      "phone": null,
+      "email": null,
+      "ein": null,
+      "registration_number": null
+    },
+    "buyer": {
+      "name": "MICROSOFT CORPORATION",
+      "contact_name": null,
+      "address": "Microsoft Corp, 123 Other St, Redmond WA, 98052",
+      "client_id": "CID-12345"
+    },
+    "invoice": {
+      "number": "INV-100",
+      "date": "11/15/2019",
+      "due_date": "12/15/2019",
+      "purchase_order": "PO-3333",
+      "payment_terms": null
+    },
+    "line_items": [
+      {
+        "description": "Test for 23 fields",
+        "quantity": 1,
+        "unit_price": "$100.00",
+        "tax_rate": null,
+        "amount": "$100.00"
+      }
+    ],
+    "financials": {
+      "subtotal": "$100.00",
+      "tax_amount": "$10.00",
+      "discount": null,
+      "total_due": "$610.00",
+      "currency": null
+    },
+    "payment": {
+      "bank_name": null,
+      "account_name": "Contoso Billing",
+      "account_number": null,
+      "routing": null,
+      "swift": null
+    },
+    "legal_notes": {
+      "msa_reference": null,
+      "late_fee_policy": null,
+      "disclaimer": "THANK YOU FOR YOUR BUSINESS!",
+      "approval_status": null
+    },
+    "document_meta": {
+      "pages": 1,
+      "file_name": null,
+      "doc_type": "INVOICE"
+    }
+  },
+  "relationships": [
+    {
+      "relation_id": 1,
+      "subject": "invoice.line_items",
+      "predicate": "summarised_by",
+      "object": "invoice.financials.subtotal",
+      "evidence": "The line item row details the quantity, description, unit price, and total for a test service, which is summarised in the financial summary as the subtotal."
+    },
+    {
+      "relation_id": 2,
+      "subject": "invoice.financials.total_due",
+      "predicate": "includes",
+      "object": "invoice.financials.tax_amount",
+      "evidence": "The financial summary includes the subtotal, sales tax, and total due amounts, indicating that the total due includes the tax amount."
+    },
+    {
+      "relation_id": 3,
+      "subject": "invoice",
+      "predicate": "issued_by",
+      "object": "vendor.name",
+      "evidence": "The document header contains the title 'INVOICE' and company name 'CONTOSO LTD.', indicating that the invoice is issued by CONTOSO LTD."
+    },
+    {
+      "relation_id": 4,
+      "subject": "invoice",
+      "predicate": "billed_to",
+      "object": "buyer.name",
+      "evidence": "Invoice metadata includes customer name and customer ID, indicating that the invoice is billed to MICROSOFT CORPORATION."
+    },
+    {
+      "relation_id": 5,
+      "subject": "invoice",
+      "predicate": "governed_by",
+      "object": "legal_notes.disclaimer",
+      "evidence": "The disclaimer 'THANK YOU FOR YOUR BUSINESS!' is part of the legal notes, suggesting it governs the tone or terms of the invoice."
+    }
+  ],
+  "agent_log": [
+    "[PREPROCESS] Ingesting: /Users/satakshi/Documents/AI Projects/LangGraph Projects/Agentic Doc Extraction/testing.pdf",
+    "[PREPROCESS] Done – 1 page(s), 1050 chars extracted",
+    "[LAYOUT] Analysing document structure …",
+    "[LAYOUT] Identified 8 structural blocks",
+    "[CLASSIFY] Assigning semantic roles to blocks …",
+    "[CLASSIFY] Classified 8 elements",
+    "[EXTRACT] Extracting typed field values …",
+    "[EXTRACT] Populated 8 top-level field groups",
+    "[RELATIONS] Mining element relationships …",
+    "[RELATIONS] Found 5 relationships",
+    "[RECONSTRUCT] Building final structured JSON …",
+    "[RECONSTRUCT] Final JSON assembled successfully ✓"
+  ]
+}

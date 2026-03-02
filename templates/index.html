@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocExtract — Agentic Document Extraction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Epilogue:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & vars ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #08090b;
+  --surface:   #0f1114;
+  --surface2:  #161a1f;
+  --border:    #1e2330;
+  --border2:   #2a3040;
+  --gold:      #e8a020;
+  --gold-dim:  rgba(232,160,32,.12);
+  --green:     #38c97a;
+  --green-dim: rgba(56,201,122,.1);
+  --red:       #e05353;
+  --blue:      #4d9cff;
+  --purple:    #9d78ff;
+  --muted:     #4a5568;
+  --muted2:    #6b7a94;
+  --text:      #c8d4e0;
+  --text-hi:   #eef2f7;
+  --mono:      'IBM Plex Mono', monospace;
+  --sans:      'Epilogue', sans-serif;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── Noise texture overlay ────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 1000;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.5;
+}
+
+/* ── Layout ───────────────────────────────────────────────── */
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ── Top bar ──────────────────────────────────────────────── */
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 28px; height: 56px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.topbar-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--sans); font-weight: 900; font-size: 15px;
+  color: var(--text-hi); letter-spacing: -0.02em;
+}
+.topbar-logo span {
+  background: var(--gold);
+  color: #000; padding: 2px 7px; border-radius: 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+}
+.topbar-divider { width: 1px; height: 24px; background: var(--border2); }
+.topbar-sub { font-size: 11px; color: var(--muted2); letter-spacing: 0.04em; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.badge {
+  font-size: 10px; padding: 3px 10px; border-radius: 4px;
+  font-family: var(--sans); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.badge-outline { border: 1px solid var(--border2); color: var(--muted2); }
+.badge-gold { border: 1px solid rgba(232,160,32,.35); color: var(--gold); background: var(--gold-dim); }
+
+/* ── Two-column body ──────────────────────────────────────── */
+.body {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────── */
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+.sidebar-section {
+  padding: 22px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.section-label {
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); font-family: var(--sans); font-weight: 700;
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* ── Drop zone ────────────────────────────────────────────── */
+.dropzone {
+  border: 1.5px dashed var(--border2);
+  border-radius: 10px; padding: 28px 16px;
+  text-align: center; cursor: pointer;
+  transition: border-color .2s, background .2s;
+  background: var(--surface2);
+  position: relative; overflow: hidden;
+}
+.dropzone:hover, .dropzone.over {
+  border-color: var(--gold);
+  background: #0f1219;
+}
+.dropzone::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(232,160,32,.07) 0%, transparent 70%);
+  opacity: 0; transition: opacity .25s;
+}
+.dropzone:hover::after, .dropzone.over::after { opacity: 1; }
+.dz-icon { font-size: 26px; margin-bottom: 10px; position: relative; z-index: 1; }
+.dz-title {
+  font-family: var(--sans); font-size: 12px; font-weight: 700;
+  color: var(--text); margin-bottom: 4px; position: relative; z-index: 1;
+}
+.dz-sub { font-size: 10px; color: var(--muted2); line-height: 1.5; position: relative; z-index: 1; }
+.dz-types { margin-top: 10px; display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; position: relative; z-index: 1; }
+.type-tag {
+  font-size: 9px; padding: 2px 7px; border-radius: 3px;
+  background: var(--surface); border: 1px solid var(--border2);
+  color: var(--muted2); letter-spacing: 0.06em;
+}
+input[type="file"] { display: none; }
+
+/* ── File card ────────────────────────────────────────────── */
+.file-card {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+}
+.fc-icon { font-size: 20px; flex-shrink: 0; }
+.fc-name { font-size: 11px; font-weight: 500; color: var(--text); word-break: break-all; line-height: 1.3; }
+.fc-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.fc-remove {
+  margin-left: auto; color: var(--muted); cursor: pointer;
+  font-size: 12px; padding: 4px; flex-shrink: 0;
+  transition: color .15s; border-radius: 3px;
+}
+.fc-remove:hover { color: var(--red); background: rgba(224,83,83,.1); }
+
+/* ── Doc type select ──────────────────────────────────────── */
+.field-row { margin-bottom: 12px; }
+.field-label { font-size: 10px; color: var(--muted2); margin-bottom: 5px; letter-spacing: 0.06em; }
+.field-select {
+  width: 100%; padding: 8px 10px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text); font-family: var(--mono);
+  font-size: 12px; appearance: none; cursor: pointer;
+  transition: border-color .15s;
+}
+.field-select:focus { outline: none; border-color: var(--gold); }
+
+/* ── Run button ───────────────────────────────────────────── */
+.btn-run {
+  width: 100%; padding: 12px;
+  background: var(--gold); border: none; border-radius: 8px;
+  color: #000; font-family: var(--sans); font-size: 12px;
+  font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  cursor: pointer; transition: all .2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-run:hover:not(:disabled) {
+  background: #f0b540;
+  box-shadow: 0 0 24px rgba(232,160,32,.3);
+  transform: translateY(-1px);
+}
+.btn-run:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ── Pipeline tracker ─────────────────────────────────────── */
+.pipeline { display: flex; flex-direction: column; gap: 1px; }
+.p-step {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 6px;
+  transition: background .15s;
+}
+.p-step.active { background: rgba(232,160,32,.07); }
+.p-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  border: 1.5px solid var(--border2); background: transparent;
+  transition: all .3s;
+}
+.p-dot.running  { background: var(--gold);  border-color: var(--gold);  animation: glow-gold 1s infinite; }
+.p-dot.done     { background: var(--green); border-color: var(--green); }
+.p-dot.error    { background: var(--red);   border-color: var(--red); }
+@keyframes glow-gold {
+  0%,100% { box-shadow: 0 0 0 0 rgba(232,160,32,.5); }
+  50%      { box-shadow: 0 0 0 6px rgba(232,160,32,0); }
+}
+.p-num { font-size: 9px; color: var(--muted); min-width: 16px; }
+.p-label { font-size: 11px; color: var(--muted2); flex: 1; transition: color .2s; }
+.p-label.running { color: var(--gold); }
+.p-label.done    { color: var(--text); }
+.p-label.error   { color: var(--red); }
+.p-time { font-size: 10px; color: var(--muted); }
+
+/* ── Stats block ──────────────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-tile {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 7px; padding: 10px 12px;
+}
+.stat-val { font-family: var(--sans); font-size: 18px; font-weight: 900; color: var(--text-hi); }
+.stat-key { font-size: 9px; color: var(--muted); margin-top: 2px; letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--sans); font-weight: 600; }
+
+/* ── Log console ──────────────────────────────────────────── */
+.log-console {
+  background: #050607; border: 1px solid var(--border);
+  border-radius: 7px; padding: 12px;
+  font-size: 10px; color: var(--muted2);
+  max-height: 140px; overflow-y: auto;
+  line-height: 1.7; font-family: var(--mono);
+}
+.log-console .log-line { padding: 1px 0; }
+.log-console .log-line.info  { color: var(--muted2); }
+.log-console .log-line.stage { color: var(--gold); }
+.log-console .log-line.done  { color: var(--green); }
+.log-console .log-line.err   { color: var(--red); }
+
+/* ── Main content ─────────────────────────────────────────── */
+.content { overflow-y: auto; padding: 28px 32px; }
+
+/* ── Empty state ──────────────────────────────────────────── */
+.empty {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  color: var(--muted);
+}
+.empty-graphic {
+  width: 120px; height: 120px;
+  border: 1px solid var(--border2); border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 48px; opacity: 0.25;
+  background: var(--surface2);
+}
+.empty-title { font-family: var(--sans); font-size: 16px; font-weight: 700; color: var(--muted2); }
+.empty-sub { font-size: 11px; max-width: 260px; text-align: center; line-height: 1.7; color: var(--muted); }
+
+/* ── Results ──────────────────────────────────────────────── */
+.results-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 24px; }
+.results-title {
+  font-family: var(--sans); font-size: 22px; font-weight: 900;
+  color: var(--text-hi); letter-spacing: -0.02em; flex: 1;
+  word-break: break-word;
+}
+.pill {
+  font-size: 10px; padding: 4px 12px; border-radius: 20px;
+  font-family: var(--sans); font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; flex-shrink: 0; margin-top: 4px;
+}
+.pill-green  { background: var(--green-dim); color: var(--green); border: 1px solid rgba(56,201,122,.25); }
+.pill-gold   { background: var(--gold-dim);  color: var(--gold);  border: 1px solid rgba(232,160,32,.25); }
+
+/* ── KPI row ──────────────────────────────────────────────── */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.kpi {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; position: relative; overflow: hidden;
+}
+.kpi-accent {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+}
+.kpi-accent.gold   { background: var(--gold); }
+.kpi-accent.green  { background: var(--green); }
+.kpi-accent.blue   { background: var(--blue); }
+.kpi-accent.purple { background: var(--purple); }
+.kpi-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--sans); font-weight: 700; }
+.kpi-value { font-family: var(--sans); font-size: 17px; font-weight: 900; color: var(--text-hi); margin-top: 6px; word-break: break-word; line-height: 1.2; }
+.kpi-sub   { font-size: 10px; color: var(--muted2); margin-top: 4px; }
+
+/* ── Section grid ─────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.span-2 { grid-column: 1 / -1; }
+
+/* ── Card ─────────────────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.card-head {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.015);
+  display: flex; align-items: center; gap: 8px;
+}
+.card-head-icon { font-size: 13px; }
+.card-head-title {
+  font-family: var(--sans); font-size: 11px; font-weight: 700;
+  color: var(--text); text-transform: uppercase; letter-spacing: 0.06em;
+}
+.card-head-count {
+  margin-left: auto; font-size: 10px; color: var(--muted);
+  background: var(--surface2); padding: 2px 8px; border-radius: 10px;
+}
+.card-body { padding: 14px 16px; }
+
+/* ── KV pairs ─────────────────────────────────────────────── */
+.kv { display: flex; flex-direction: column; gap: 8px; }
+.kv-row { display: flex; gap: 10px; align-items: baseline; }
+.kv-k {
+  font-size: 9px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.1em; min-width: 100px; flex-shrink: 0;
+  font-family: var(--sans); font-weight: 700; padding-top: 1px;
+}
+.kv-v { font-size: 12px; color: var(--text); flex: 1; word-break: break-word; }
+.kv-v.hi    { color: var(--gold); font-weight: 500; }
+.kv-v.green { color: var(--green); }
+.kv-v.muted { color: var(--muted2); }
+.kv-v.big   { font-family: var(--sans); font-size: 15px; font-weight: 800; color: var(--text-hi); }
+
+/* ── Line items table ─────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.data-table th {
+  text-align: left; padding: 8px 12px;
+  background: var(--surface2); color: var(--muted);
+  font-family: var(--sans); font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--border);
+}
+.data-table th:last-child { text-align: right; }
+.data-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  color: var(--text); vertical-align: top;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(255,255,255,.018); }
+.data-table td.num { text-align: right; font-weight: 500; color: var(--gold); }
+.data-table td.idx { color: var(--muted); font-size: 10px; }
+.data-table td.desc { color: var(--text); }
+.data-table td.tax { color: var(--muted2); text-align: center; }
+
+/* ── Relationship rows ────────────────────────────────────── */
+.rel-list { display: flex; flex-direction: column; gap: 6px; }
+.rel-row {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 7px; padding: 10px 12px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.rel-subject  { color: var(--blue);   font-weight: 500; font-size: 11px; }
+.rel-pred     { background: rgba(157,120,255,.15); color: var(--purple); padding: 2px 8px; border-radius: 10px; font-size: 10px; font-family: var(--sans); font-weight: 700; }
+.rel-arrow    { color: var(--muted); font-size: 11px; }
+.rel-object   { color: var(--green); font-weight: 500; font-size: 11px; }
+.rel-evidence { color: var(--muted); font-size: 10px; width: 100%; margin-top: 4px; padding-top: 5px; border-top: 1px solid var(--border); line-height: 1.5; }
+.rel-evidence::before { content: '⤷ '; }
+
+/* ── Totals block ─────────────────────────────────────────── */
+.totals-block { display: flex; flex-direction: column; gap: 6px; }
+.totals-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.totals-row:last-child { border-bottom: none; padding-top: 10px; border-top: 1px solid var(--border2); }
+.totals-label { font-size: 11px; color: var(--muted2); }
+.totals-val { font-size: 12px; color: var(--text); font-weight: 500; }
+.totals-val.total { font-family: var(--sans); font-size: 16px; font-weight: 900; color: var(--gold); }
+.totals-val.neg { color: var(--red); }
+
+/* ── Raw JSON ─────────────────────────────────────────────── */
+.json-toggle {
+  margin-top: 16px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: var(--muted2); transition: all .15s;
+  user-select: none;
+}
+.json-toggle:hover { border-color: var(--gold); color: var(--gold); }
+.json-pre {
+  display: none; margin-top: 8px;
+  background: #050607; border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px;
+  font-size: 10px; color: #7ec8e3;
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 440px; overflow-y: auto; line-height: 1.6;
+}
+.json-pre.open { display: block; }
+
+/* ── Error box ────────────────────────────────────────────── */
+.error-box {
+  background: rgba(224,83,83,.08); border: 1px solid rgba(224,83,83,.25);
+  border-radius: 8px; padding: 14px 16px; font-size: 12px;
+  color: var(--red); line-height: 1.6; margin-bottom: 16px;
+}
+.error-box pre { margin-top: 8px; font-size: 10px; opacity: .7; white-space: pre-wrap; }
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Spinner ──────────────────────────────────────────────── */
+.spin { display: inline-block; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Fade in ──────────────────────────────────────────────── */
+.fade-in { animation: fadeIn .4s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 480px; }
+  .kpi-row { grid-template-columns: 1fr 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Top bar ──────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      DocExtract <span>AI</span>
+    </div>
+    <div class="topbar-divider"></div>
+    <div class="topbar-sub">Agentic Document Extraction Pipeline</div>
+    <div class="topbar-right">
+      <div class="badge badge-outline">LangGraph</div>
+      <div class="badge badge-gold">⬡ AI Powered</div>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <!-- ── Sidebar ────────────────────────────────────────── -->
+    <aside class="sidebar">
+
+      <!-- Upload -->
+      <div class="sidebar-section">
+        <div class="section-label">Upload Document</div>
+
+        <div id="file-card" style="display:none">
+          <div class="file-card">
+            <div class="fc-icon" id="fc-icon">📄</div>
+            <div>
+              <div class="fc-name" id="fc-name"></div>
+              <div class="fc-meta" id="fc-meta"></div>
+            </div>
+            <div class="fc-remove" onclick="clearFile()" title="Remove file">✕</div>
+          </div>
+        </div>
+
+        <div id="dropzone" class="dropzone"
+             onclick="document.getElementById('file-input').click()"
+             ondragover="onDragOver(event)"
+             ondragleave="onDragLeave(event)"
+             ondrop="onDrop(event)">
+          <div class="dz-icon">⬆</div>
+          <div class="dz-title">Drop file or click to browse</div>
+          <div class="dz-sub">Invoices, POs, receipts, financial docs</div>
+          <div class="dz-types">
+            <span class="type-tag">PDF</span>
+            <span class="type-tag">PNG</span>
+            <span class="type-tag">JPG</span>
+            <span class="type-tag">TIFF</span>
+          </div>
+        </div>
+        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp"
+               onchange="onFileSelected(event)">
+
+        <div class="field-row" style="margin-top:14px">
+          <div class="field-label">Document Type Hint</div>
+          <select class="field-select" id="doc-type">
+            <option value="invoice">Invoice</option>
+            <option value="purchase_order">Purchase Order</option>
+            <option value="receipt">Receipt</option>
+            <option value="contract">Contract</option>
+            <option value="auto">Auto-detect</option>
+          </select>
+        </div>
+
+        <button class="btn-run" id="btn-run" onclick="runExtraction()" disabled>
+          ▶ &nbsp; Run Extraction
+        </button>
+      </div>
+
+      <!-- Pipeline -->
+      <div class="sidebar-section">
+        <div class="section-label">Pipeline Stages</div>
+        <div class="pipeline" id="pipeline">
+          <!-- injected by JS -->
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="sidebar-section" id="stats-section" style="display:none">
+        <div class="section-label">Extraction Stats</div>
+        <div class="stat-grid">
+          <div class="stat-tile"><div class="stat-val" id="stat-blocks">—</div><div class="stat-key">Layout Blocks</div></div>
+          <div class="stat-tile"><div class="stat-val" id="stat-elements">—</div><div class="stat-key">Elements</div></div>
+          <div class="stat-tile"><div class="stat-val" id="stat-lines">—</div><div class="stat-key">Line Items</div></div>
+          <div class="stat-tile"><div class="stat-val" id="stat-rels">—</div><div class="stat-key">Relations</div></div>
+        </div>
+      </div>
+
+      <!-- Console -->
+      <div class="sidebar-section">
+        <div class="section-label">Agent Log</div>
+        <div class="log-console" id="log-console">
+          <div class="log-line info">Ready. Upload a document to begin.</div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── Main content ──────────────────────────────────── -->
+    <main class="content" id="content">
+      <div class="empty" id="empty-state">
+        <div class="empty-graphic">⊡</div>
+        <div class="empty-title">No Document Loaded</div>
+        <div class="empty-sub">Upload an invoice or financial document and click <strong>Run Extraction</strong> to start the pipeline.</div>
+      </div>
+      <div id="results" style="display:none"></div>
+    </main>
+
+  </div>
+</div>
+
+<script>
+// ── Pipeline stage definitions ──────────────────────────────────────────────
+const STAGES = [
+  { id: 'preprocess',    label: 'Document Preprocessing' },
+  { id: 'layout',        label: 'Layout Analysis' },
+  { id: 'classify',      label: 'Element Classification' },
+  { id: 'extract',       label: 'Content Extraction' },
+  { id: 'relationships', label: 'Relationship Extraction' },
+  { id: 'reconstruct',   label: 'Semantic Reconstruction' },
+];
+
+let selectedFile = null;
+let running      = false;
+
+// ── Build pipeline UI ────────────────────────────────────────────────────────
+function buildPipeline() {
+  const container = document.getElementById('pipeline');
+  container.innerHTML = STAGES.map((s, i) => `
+    <div class="p-step" id="ps-${s.id}">
+      <div class="p-dot" id="pd-${s.id}"></div>
+      <span class="p-num">${String(i+1).padStart(2,'0')}</span>
+      <span class="p-label" id="pl-${s.id}">${s.label}</span>
+      <span class="p-time" id="pt-${s.id}"></span>
+    </div>
+  `).join('');
+}
+
+function resetPipeline() {
+  STAGES.forEach(s => {
+    document.getElementById(`pd-${s.id}`)?.classList.remove('running','done','error');
+    document.getElementById(`pl-${s.id}`)?.classList.remove('running','done','error');
+    document.getElementById(`ps-${s.id}`)?.classList.remove('active');
+    const t = document.getElementById(`pt-${s.id}`);
+    if (t) t.textContent = '';
+  });
+}
+
+function setStage(id, status, elapsed) {
+  const dot   = document.getElementById(`pd-${id}`);
+  const label = document.getElementById(`pl-${id}`);
+  const step  = document.getElementById(`ps-${id}`);
+  const time  = document.getElementById(`pt-${id}`);
+  if (!dot) return;
+  dot.className   = `p-dot ${status}`;
+  label.className = `p-label ${status}`;
+  step.classList.toggle('active', status === 'running');
+  if (elapsed && time) time.textContent = elapsed + 's';
+}
+
+// ── File handling ────────────────────────────────────────────────────────────
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (file) setFile(file);
+}
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.add('over');
+}
+function onDragLeave(e) {
+  document.getElementById('dropzone').classList.remove('over');
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) setFile(file);
+}
+
+function setFile(file) {
+  selectedFile = file;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const icons = {pdf:'📄', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', tiff:'🖼️', bmp:'🖼️'};
+  document.getElementById('fc-icon').textContent = icons[ext] || '📁';
+  document.getElementById('fc-name').textContent = file.name;
+  document.getElementById('fc-meta').textContent =
+    `${(file.size / 1024).toFixed(1)} KB · ${ext.toUpperCase()}`;
+  document.getElementById('file-card').style.display = 'block';
+  document.getElementById('dropzone').style.display  = 'none';
+  document.getElementById('btn-run').disabled = false;
+
+  resetPipeline();
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('empty-state').style.display = 'flex';
+  document.getElementById('stats-section').style.display = 'none';
+  clearLog();
+  addLog('info', `File selected: ${file.name}`);
+}
+
+function clearFile() {
+  selectedFile = null;
+  document.getElementById('file-card').style.display  = 'none';
+  document.getElementById('dropzone').style.display   = 'block';
+  document.getElementById('btn-run').disabled = true;
+  document.getElementById('file-input').value = '';
+  resetPipeline();
+  document.getElementById('results').style.display    = 'none';
+  document.getElementById('empty-state').style.display = 'flex';
+  document.getElementById('stats-section').style.display = 'none';
+  clearLog();
+  addLog('info', 'Ready. Upload a document to begin.');
+}
+
+// ── Log ──────────────────────────────────────────────────────────────────────
+function addLog(cls, msg) {
+  const c = document.getElementById('log-console');
+  const d = document.createElement('div');
+  d.className = `log-line ${cls}`;
+  const now = new Date().toLocaleTimeString('en-US', {hour12:false});
+  d.textContent = `[${now}] ${msg}`;
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+function clearLog() {
+  document.getElementById('log-console').innerHTML = '';
+}
+
+// ── Main extraction flow ─────────────────────────────────────────────────────
+async function runExtraction() {
+  if (!selectedFile || running) return;
+  running = true;
+  document.getElementById('btn-run').disabled = true;
+  document.getElementById('btn-run').innerHTML = '<span class="spin">⟳</span> &nbsp; Extracting…';
+  resetPipeline();
+  clearLog();
+  addLog('stage', 'Starting pipeline…');
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('empty-state').style.display = 'flex';
+
+  try {
+    // 1) Upload + start job
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('doc_type', document.getElementById('doc-type').value);
+
+    addLog('info', 'Uploading file…');
+    const startRes = await fetch('/api/extract', { method: 'POST', body: formData });
+    if (!startRes.ok) {
+      const err = await startRes.json();
+      throw new Error(err.error || 'Upload failed');
+    }
+    const { job_id } = await startRes.json();
+    addLog('info', `Job started: ${job_id.slice(0, 8)}…`);
+
+    // 2) Open SSE stream
+    await new Promise((resolve, reject) => {
+      const es = new EventSource(`/api/stream/${job_id}`);
+
+      es.onmessage = (e) => {
+        let data;
+        try { data = JSON.parse(e.data); } catch { return; }
+
+        switch (data.type) {
+          case 'pipeline_start':
+            addLog('info', 'Pipeline started');
+            break;
+
+          case 'stage_start':
+            setStage(data.stage, 'running');
+            addLog('stage', `▶ ${data.message}`);
+            break;
+
+          case 'stage_done':
+            setStage(data.stage, 'done', data.elapsed);
+            addLog('done', `✓ ${data.message}`);
+            break;
+
+          case 'pipeline_done':
+            es.close();
+            addLog('done', 'Pipeline complete ✓');
+            renderResults(data.result);
+            resolve();
+            break;
+
+          case 'pipeline_error':
+            es.close();
+            addLog('err', `Error: ${data.message}`);
+            showError(data.message, data.traceback);
+            reject(new Error(data.message));
+            break;
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+        reject(new Error('SSE connection lost'));
+      };
+    });
+
+  } catch (err) {
+    addLog('err', `Failed: ${err.message}`);
+    showError(err.message);
+  } finally {
+    running = false;
+    document.getElementById('btn-run').disabled = !selectedFile;
+    document.getElementById('btn-run').innerHTML = '▶ &nbsp; Run Extraction';
+  }
+}
+
+// ── Error display ────────────────────────────────────────────────────────────
+function showError(msg, tb) {
+  document.getElementById('empty-state').style.display = 'none';
+  const r = document.getElementById('results');
+  r.style.display = 'block';
+  r.innerHTML = `
+    <div class="error-box fade-in">
+      <strong>⚠ Pipeline Error</strong><br>${escHtml(msg)}
+      ${tb ? `<pre>${escHtml(tb.slice(0, 800))}</pre>` : ''}
+    </div>`;
+  STAGES.forEach(s => {
+    const dot = document.getElementById(`pd-${s.id}`);
+    if (dot?.classList.contains('running')) {
+      setStage(s.id, 'error');
+    }
+  });
+}
+
+// ── Result renderer ───────────────────────────────────────────────────────────
+function renderResults(result) {
+  const ed    = result?.extracted_data || {};
+  const inv   = ed.invoice    || {};
+  const fin   = ed.financials || {};
+  const ven   = ed.vendor     || {};
+  const buy   = ed.buyer      || {};
+  const pay   = ed.payment    || {};
+  const leg   = ed.legal_notes|| {};
+  const lines = ed.line_items || [];
+  const rels  = result?.relationships || [];
+  const cur   = fin.currency || 'USD';
+
+  // stats sidebar
+  document.getElementById('stat-blocks').textContent   = result?.layout?.structural_blocks?.length ?? '—';
+  document.getElementById('stat-elements').textContent = result?.semantics?.classified_elements?.length ?? '—';
+  document.getElementById('stat-lines').textContent    = lines.length;
+  document.getElementById('stat-rels').textContent     = rels.length;
+  document.getElementById('stats-section').style.display = 'block';
+
+  const f  = (v, d='—') => (v == null || v === '') ? d : String(v);
+  const fc = (v) => {
+    if (v == null) return '—';
+    try { return new Intl.NumberFormat('en-US', {style:'currency', currency: cur}).format(v); }
+    catch { return '$' + v; }
+  };
+
+  const lineRows = lines.map((li, i) => `
+    <tr>
+      <td class="idx">${String(i+1).padStart(2,'0')}</td>
+      <td class="desc">${escHtml(f(li.description))}</td>
+      <td>${f(li.quantity)}</td>
+      <td class="num">${fc(li.unit_price)}</td>
+      <td class="tax">${f(li.tax_rate)}</td>
+      <td class="num">${fc(li.amount)}</td>
+    </tr>`).join('');
+
+  const relRows = rels.map(r => `
+    <div class="rel-row">
+      <span class="rel-subject">${escHtml(f(r.subject))}</span>
+      <span class="rel-arrow">→</span>
+      <span class="rel-pred">${escHtml(f(r.predicate))}</span>
+      <span class="rel-arrow">→</span>
+      <span class="rel-object">${escHtml(f(r.object))}</span>
+      ${r.evidence ? `<div class="rel-evidence">${escHtml(r.evidence)}</div>` : ''}
+    </div>`).join('');
+
+  const html = `
+  <div class="fade-in">
+    <!-- Header -->
+    <div class="results-header">
+      <div class="results-title">${escHtml(f(inv.number, 'Extracted Document'))}</div>
+      ${leg.approval_status ? `<div class="pill pill-gold">✓ ${escHtml(leg.approval_status)}</div>` : ''}
+      <div class="pill pill-green">Extracted</div>
+    </div>
+
+    <!-- KPI row -->
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-accent gold"></div>
+        <div class="kpi-label">Total Due</div>
+        <div class="kpi-value">${fc(fin.total_due)}</div>
+        <div class="kpi-sub">${f(cur)}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent green"></div>
+        <div class="kpi-label">Invoice Date</div>
+        <div class="kpi-value" style="font-size:14px">${f(inv.date)}</div>
+        <div class="kpi-sub">Due ${f(inv.due_date)}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent blue"></div>
+        <div class="kpi-label">Line Items</div>
+        <div class="kpi-value">${lines.length}</div>
+        <div class="kpi-sub">Subtotal ${fc(fin.subtotal)}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent purple"></div>
+        <div class="kpi-label">Payment Terms</div>
+        <div class="kpi-value" style="font-size:14px">${f(inv.payment_terms)}</div>
+        <div class="kpi-sub">PO: ${f(inv.purchase_order)}</div>
+      </div>
+    </div>
+
+    <!-- Vendor + Buyer -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><span class="card-head-icon">🏢</span><span class="card-head-title">Vendor</span></div>
+        <div class="card-body">
+          <div class="kv">
+            <div class="kv-row"><span class="kv-k">Company</span><span class="kv-v hi">${escHtml(f(ven.name))}</span></div>
+            <div class="kv-row"><span class="kv-k">Address</span><span class="kv-v">${escHtml(f(ven.address))}</span></div>
+            <div class="kv-row"><span class="kv-k">Phone</span><span class="kv-v">${escHtml(f(ven.phone))}</span></div>
+            <div class="kv-row"><span class="kv-k">Email</span><span class="kv-v">${escHtml(f(ven.email))}</span></div>
+            <div class="kv-row"><span class="kv-k">EIN</span><span class="kv-v">${escHtml(f(ven.ein))}</span></div>
+            <div class="kv-row"><span class="kv-k">Reg #</span><span class="kv-v muted">${escHtml(f(ven.registration_number))}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-head-icon">👤</span><span class="card-head-title">Buyer / Bill To</span></div>
+        <div class="card-body">
+          <div class="kv">
+            <div class="kv-row"><span class="kv-k">Company</span><span class="kv-v hi">${escHtml(f(buy.name))}</span></div>
+            <div class="kv-row"><span class="kv-k">Contact</span><span class="kv-v">${escHtml(f(buy.contact_name))}</span></div>
+            <div class="kv-row"><span class="kv-k">Address</span><span class="kv-v">${escHtml(f(buy.address))}</span></div>
+            <div class="kv-row"><span class="kv-k">Client ID</span><span class="kv-v green">${escHtml(f(buy.client_id))}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment + Financials -->
+      <div class="card">
+        <div class="card-head"><span class="card-head-icon">🏦</span><span class="card-head-title">Payment Details</span></div>
+        <div class="card-body">
+          <div class="kv">
+            <div class="kv-row"><span class="kv-k">Bank</span><span class="kv-v">${escHtml(f(pay.bank_name))}</span></div>
+            <div class="kv-row"><span class="kv-k">Account</span><span class="kv-v">${escHtml(f(pay.account_name))}</span></div>
+            <div class="kv-row"><span class="kv-k">Acct No</span><span class="kv-v hi">${escHtml(f(pay.account_number))}</span></div>
+            <div class="kv-row"><span class="kv-k">Routing</span><span class="kv-v">${escHtml(f(pay.routing))}</span></div>
+            <div class="kv-row"><span class="kv-k">SWIFT</span><span class="kv-v">${escHtml(f(pay.swift))}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-head-icon">💰</span><span class="card-head-title">Financials</span></div>
+        <div class="card-body">
+          <div class="totals-block">
+            <div class="totals-row"><span class="totals-label">Subtotal</span><span class="totals-val">${fc(fin.subtotal)}</span></div>
+            <div class="totals-row"><span class="totals-label">Tax</span><span class="totals-val">${fc(fin.tax_amount)}</span></div>
+            <div class="totals-row"><span class="totals-label">Discount</span><span class="totals-val ${fin.discount < 0 ? 'neg' : ''}">${fc(fin.discount)}</span></div>
+            <div class="totals-row"><span class="totals-label" style="font-weight:700;color:var(--text)">Total Due</span><span class="totals-val total">${fc(fin.total_due)}</span></div>
+          </div>
+          <div class="kv" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+            <div class="kv-row"><span class="kv-k">Late Fee</span><span class="kv-v muted">${escHtml(f(leg.late_fee_policy))}</span></div>
+            <div class="kv-row"><span class="kv-k">MSA Ref</span><span class="kv-v muted">${escHtml(f(leg.msa_reference))}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line items -->
+    ${lines.length ? `
+    <div class="card span-2" style="margin-bottom:14px">
+      <div class="card-head">
+        <span class="card-head-icon">📋</span>
+        <span class="card-head-title">Line Items</span>
+        <span class="card-head-count">${lines.length} items</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Description</th><th>Qty</th>
+            <th>Unit Price</th><th>Tax</th><th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>${lineRows}</tbody>
+      </table>
+    </div>` : ''}
+
+    <!-- Relationships -->
+    ${rels.length ? `
+    <div class="card span-2" style="margin-bottom:14px">
+      <div class="card-head">
+        <span class="card-head-icon">🔗</span>
+        <span class="card-head-title">Relationships</span>
+        <span class="card-head-count">${rels.length} found</span>
+      </div>
+      <div class="card-body">
+        <div class="rel-list">${relRows}</div>
+      </div>
+    </div>` : ''}
+
+    <!-- Raw JSON -->
+    <div class="json-toggle" onclick="toggleJson(this)">
+      <span>⟨/⟩ &nbsp; Raw Extracted JSON</span>
+      <span id="json-arrow">▼ expand</span>
+    </div>
+    <pre class="json-pre" id="json-pre">${escHtml(JSON.stringify(result, null, 2))}</pre>
+  </div>`;
+
+  document.getElementById('empty-state').style.display = 'none';
+  const r = document.getElementById('results');
+  r.style.display = 'block';
+  r.innerHTML = html;
+}
+
+function toggleJson(el) {
+  const pre = document.getElementById('json-pre');
+  const arrow = document.getElementById('json-arrow');
+  pre.classList.toggle('open');
+  arrow.textContent = pre.classList.contains('open') ? '▲ collapse' : '▼ expand';
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+buildPipeline();
+</script>
+</body>
+</html>
