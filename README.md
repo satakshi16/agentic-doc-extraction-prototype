@@ -52,7 +52,7 @@ project/
 ├── server.py                      # Flask backend — REST + SSE
 ├── templates/
     └── index.html                 # Single-file web UI
-├── sample_invoice.pdf             # Bundled test document
+├── sample_invoice.pdf             # Bundled test document (https://github.com/ssukhpinder/AzureOpenAI/blob/main/samples/Azure.OpenAI.DocumentIntelligence/sample-document/sample-invoice.pdf)
 └── README.md
 ```
 
