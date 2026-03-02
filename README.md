@@ -68,7 +68,7 @@ project/
 ## Running the Web UI
 
 # Create a .env file with your OpenAI API Key
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY="sk-...
 
 ```bash
 
